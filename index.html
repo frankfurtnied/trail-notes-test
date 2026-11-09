@@ -13,10 +13,38 @@
 <link rel="apple-touch-icon" href="trail-notes-icon-192.png">
 <script>
   // The service worker uses versioned, app-scoped caches. Do not clear other apps' data.
-  const TRAIL_NOTES_BUILD = '2026-11-08-safe-v1';
+  const TRAIL_NOTES_BUILD = '2026-11-08-isolated-test-v2';
 </script>
 
-<title>Trail Notes — Camping Diary</title>
+
+<script id="trailNotesPreviewIsolation">
+/* ISOLATED PREVIEW: absolutely no shared persistent browser storage. All
+   regular localStorage uses in app scripts resolve to this in-memory store,
+   not the GitHub Pages origin's localStorage used by the production app. */
+const TN_PREVIEW_MEMORY = new Map();
+const localStorage = Object.freeze({
+  getItem: key => TN_PREVIEW_MEMORY.has(String(key)) ? TN_PREVIEW_MEMORY.get(String(key)) : null,
+  setItem: (key, value) => { TN_PREVIEW_MEMORY.set(String(key), String(value)); },
+  removeItem: key => { TN_PREVIEW_MEMORY.delete(String(key)); },
+  clear: () => TN_PREVIEW_MEMORY.clear(),
+  key: index => [...TN_PREVIEW_MEMORY.keys()][index] ?? null,
+  get length() { return TN_PREVIEW_MEMORY.size; }
+});
+window.TN_ISOLATED_PREVIEW = true;
+// Block all requests to the production database, even from unanticipated code paths.
+const TN_PREVIEW_NATIVE_FETCH = window.fetch.bind(window);
+window.fetch = function(input, init) {
+  try {
+    const rawUrl = (input && typeof input === 'object' && 'url' in input) ? input.url : String(input);
+    if (new URL(rawUrl, document.baseURI).hostname === 'ycsoaagxojcuiavkueto.supabase.co') {
+      return Promise.reject(new Error('Cloud access disabled in isolated test preview'));
+    }
+  } catch (e) { /* Defer invalid requests to native fetch. */ }
+  return TN_PREVIEW_NATIVE_FETCH(input, init);
+};
+</script>
+
+<title>Trail Notes — SAFE TEST (No Cloud)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com/">
 <link rel="preconnect" href="https://fonts.gstatic.com/" crossorigin="">
 
@@ -1048,7 +1076,7 @@ header p{
   window.addEventListener("online", function(){document.getElementById("offline-banner").style.display="none";});
   window.addEventListener("offline", function(){document.getElementById("offline-banner").style.display="block";});
   if(!navigator.onLine){document.getElementById("offline-banner").style.display="block";}
-  if('serviceWorker' in navigator && location.protocol !== 'file:') {
+  if(!window.TN_ISOLATED_PREVIEW && 'serviceWorker' in navigator && location.protocol !== 'file:') {
     window.addEventListener('load', function(){
       navigator.serviceWorker.register('trail-notes-sw.js?v=2026-11-08-safe-v1', {updateViaCache:'none'}).then(function(reg){
         reg.update().catch(function(){});
@@ -1073,6 +1101,10 @@ header p{
   <button onclick="doSignOut()" style="background:none;border:1px solid rgba(245,237,216,.2);color:var(--smoke);border-radius:3px;padding:3px 10px;font-family:-apple-system,Georgia,serif;font-size:.73rem;cursor:pointer;" title="Sign out">Sign out</button>
 </div>
 
+<div id="tnIsolatedNotice" role="status" style="border:2px solid #edbd60; border-radius:9px; padding:12px 17px; margin:12px 0 20px; background:#f8edcf; color:#2c1a0e; line-height:1.55; box-shadow:0 4px 14px rgba(0,0,0,.22)">
+  <strong style="display:block;font-size:1rem">🔒 SAFE TEST PREVIEW — cloud disconnected</strong>
+  <span style="font-size:.88rem">No sign-in or cloud sync is possible here. This test keeps records in this browser tab's memory only and resets when you reload. To view all your camping history, go to <strong>My Parks → Import Backup</strong> and choose your PRIVATE full-restore JSON file from your computer. Do NOT upload that JSON file to GitHub.</span>
+</div>
 <div class="stats-bar" id="statsBar"></div>
 
 <div class="tabs">
@@ -3786,7 +3818,7 @@ function importData(e) {
         });
       }
       saveState(); renderAll();
-      showToast('Backup merged in! 🌲');
+      showToast('Private backup loaded into this test tab only! 🌲');
     } catch(err) { showToast('Could not read backup file ❌'); }
     document.getElementById('importFile').value = '';
   };
@@ -3835,6 +3867,7 @@ function setHomeAddress(){
 }
 
 async function sbFetch(path, options = {}) {
+  if(window.TN_ISOLATED_PREVIEW) throw new Error('Cloud is disabled in the test preview');
   const headers = {
     'apikey': SUPABASE_KEY,
     'Content-Type': 'application/json',
@@ -5666,6 +5699,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('userBar').style.visibility = 'hidden';
   document.getElementById('authPass').addEventListener('keydown', e => { if (e.key === 'Enter') doSignIn(); });
   document.getElementById('authEmail').addEventListener('keydown', e => { if (e.key === 'Enter') doSignIn(); });
+  if (window.TN_ISOLATED_PREVIEW) {
+    // No sign-in, no cloud download or upload. Import JSON into memory only.
+    document.getElementById('authBg').style.display = 'none';
+    renderAll();
+    return;
+  }
   const user = await getStoredSession();
   if (user) {
     await onSignedIn(user);
