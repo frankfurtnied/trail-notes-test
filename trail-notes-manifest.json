@@ -1,7 +1,7 @@
 {
-  "name": "Trail Notes \u2014 Camping Diary",
-  "short_name": "Trail Notes",
-  "description": "Camping diary, trip planner, campground records and packing lists.",
+  "name": "Trail Notes \u2014 CLOUD TEST V4",
+  "short_name": "Trail Notes Test",
+  "description": "Isolated test app. Use temporary sample records only; not for your real camping data.",
   "id": "./",
   "start_url": "./",
   "scope": "./",
